@@ -1,12 +1,11 @@
 from kgbench import Config, Configurable, Dataset
 from kgbench.indexing import where_in
-
-import random
 import torch
 from typing import Optional
 import numpy as np
 import numba
 import time
+import secrets
 
 SLOTS = [0, 1, 2]
 SLOT_STR = ["s", "p", "o"]
@@ -667,8 +666,7 @@ class KgeUniformSampler(KgeSampler):
         # unique_samples = np.random.choice(
         #     self.vocabulary_size[slot], num_unique, replace=False
         # )
-        unique_samples = random.sample(
-            range(self.vocabulary_size[slot]),
+        unique_samples = secrets.SystemRandom().sample(range(self.vocabulary_size[slot]),
             num_unique if self.shared_type == "naive" else num_unique + 1,
         )
 

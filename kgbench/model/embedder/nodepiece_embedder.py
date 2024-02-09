@@ -15,9 +15,9 @@ import pickle
 from typing import List, Dict, Optional
 from pathlib import Path
 from tqdm import tqdm
-import random
 
 from collections import defaultdict
+import secrets
 
 
 class NodePieceEmbedder(KgeEmbedder):
@@ -89,7 +89,7 @@ class NodePieceEmbedder(KgeEmbedder):
             len_stats = [len(v) for k,v in e2r.items()]
             print(f"Unique relations per node - min: {min(len_stats)}, avg: {np.mean(len_stats)}, 66th perc: {np.percentile(len_stats, 66)}, max: {max(len_stats)} ")
             unique_1hop_relations = [
-                random.sample(e2r[i], k=min(self.sample_rels, len(e2r[i]))) + [pad_idx] * (self.sample_rels-min(len(e2r[i]), self.sample_rels))
+                secrets.SystemRandom().sample(e2r[i], k=min(self.sample_rels, len(e2r[i]))) + [pad_idx] * (self.sample_rels-min(len(e2r[i]), self.sample_rels))
                 for i in range(self.nentity)
             ]
             self.unique_1hop_relations = torch.tensor(unique_1hop_relations, dtype=torch.long, device=self.config.get("job.device"))
