@@ -16,6 +16,21 @@ class KgeSampler(Configurable):
     """Negative sampler. """
 
     def __init__(self, config: Config, configuration_key: str, dataset: Dataset):
+        """Negative sampling for knowledge graph embeddings.
+        Parameters:
+            - config (Config): Configuration object for the negative sampling.
+            - configuration_key (str): Key for the configuration.
+            - dataset (Dataset): Dataset object containing the knowledge graph.
+        Returns:
+            - None.
+        Processing Logic:
+            - Load configuration.
+            - Set number of samples, filtering options, vocabulary size, shared type, and replacement.
+            - Check for valid options.
+            - Create indices for filtering if needed.
+            - Set dataset.
+            - Auto configure number of samples if needed."""
+        
         super().__init__(config, configuration_key)
 
         # load config
@@ -141,6 +156,19 @@ class KgeSampler(Configurable):
 
     def _bio_sample(
         self, positive_triples: torch.Tensor, slot: int, num_samples: int
+        """Returns a tensor of randomly generated bio samples based on the given positive triples, slot, and number of samples.
+        Parameters:
+            - positive_triples (torch.Tensor): A tensor of positive triples.
+            - slot (int): The slot to generate bio samples for.
+            - num_samples (int): The number of bio samples to generate.
+        Returns:
+            - (torch.Tensor): A tensor of randomly generated bio samples.
+        Processing Logic:
+            - Generate a random tensor of the same size as positive_triples.
+            - Create a tensor of bio ranges and bounds.
+            - Determine the bio index based on the slot.
+            - Return the randomly generated bio samples based on the bio index."""
+        
     ) -> torch.Tensor:
         rand = torch.rand((positive_triples.size(0), num_samples))
         bio_range = torch.tensor([10687, 10533, 45085, 17499, 9969])
@@ -247,6 +275,20 @@ class BatchNegativeSample(Configurable):
         slot: int,
         num_samples: int,
     ):
+        """"Initializes the class with the given configuration, configuration key, positive triples, slot, and number of samples. Returns the class object with the specified implementation option, forward time, and prepare time."
+        Parameters:
+            - config (Config): Configuration object.
+            - configuration_key (str): Key for the configuration.
+            - positive_triples (torch.Tensor): Tensor containing positive triples.
+            - slot (int): Slot number.
+            - num_samples (int): Number of samples.
+        Returns:
+            - self (class object): Initialized class object with specified attributes.
+        Processing Logic:
+            - Initialize class with given parameters.
+            - Set implementation option.
+            - Set forward and prepare time."""
+        
         super().__init__(config, configuration_key)
         self.positive_triples = positive_triples
         self.slot = slot
@@ -368,6 +410,20 @@ class BatchNegativeSample(Configurable):
 
     @staticmethod
     def _score_unique_targets(model, slot, triples, unique_targets) -> torch.Tensor:
+        """Calculates the scores for unique targets.
+        Parameters:
+            - model (torch.Tensor): The model used for scoring.
+            - slot (str): The slot to be scored, either 'S', 'P', or 'O'.
+            - triples (torch.Tensor): The triples to be scored.
+            - unique_targets (torch.Tensor): The unique targets to be scored against.
+        Returns:
+            - torch.Tensor: The scores for the unique targets.
+        Processing Logic:
+            - Scores are calculated based on the given slot.
+            - The scores are calculated using the model.
+            - The scores are returned for the unique targets.
+            - Raises an error if the slot is not valid."""
+        
         if slot == S:
             all_scores = model.score_po(triples[:, P], triples[:, O], unique_targets)
         elif slot == P:
@@ -391,13 +447,40 @@ class DefaultBatchNegativeSample(BatchNegativeSample):
         num_samples: int,
         samples: torch.Tensor,
     ):
+        """Initializes the object with the given configuration, configuration key, positive triples, slot, number of samples, and samples.
+        Parameters:
+            - config (Config): Configuration object.
+            - configuration_key (str): Key for the configuration.
+            - positive_triples (torch.Tensor): Tensor containing positive triples.
+            - slot (int): Slot number.
+            - num_samples (int): Number of samples.
+            - samples (torch.Tensor): Tensor containing samples.
+        Returns:
+            - None: Does not return anything.
+        Processing Logic:
+            - Initialize object with given parameters.
+            - Call super() to initialize parent class.
+            - Set samples attribute to given samples tensor."""
+        
         super().__init__(config, configuration_key, positive_triples, slot, num_samples)
         self._samples = samples
 
     def samples(self, indexes=None) -> torch.Tensor:
+        """"""
+        
         return self._samples if indexes is None else self._samples[indexes]
 
     def to(self, device) -> "DefaultBatchNegativeSample":
+        """"Moves the DefaultBatchNegativeSample object to the specified device and returns it."
+        Parameters:
+            - device (str): The device to move the object to.
+        Returns:
+            - DefaultBatchNegativeSample: The object after being moved to the specified device.
+        Processing Logic:
+            - Move object to specified device.
+            - Convert samples to specified device.
+            - Return the object."""
+        
         super().to(device)
         self._samples = self._samples.to(device)
         return self
@@ -420,11 +503,15 @@ class NaiveSharedNegativeSample(BatchNegativeSample):
         unique_samples: torch.Tensor,
         repeat_indexes: torch.Tensor,
     ):
+        """"""
+        
         super().__init__(config, configuration_key, positive_triples, slot, num_samples)
         self._unique_samples = unique_samples
         self._repeat_indexes = repeat_indexes
 
     def unique_samples(self, indexes=None, return_inverse=False) -> torch.Tensor:
+        """"""
+        
         if return_inverse:
             # slow but probably rarely used anyway
             samples = self.samples(indexes)
@@ -433,6 +520,8 @@ class NaiveSharedNegativeSample(BatchNegativeSample):
             return self._unique_samples
 
     def samples(self, indexes=None) -> torch.Tensor:
+        """"""
+        
         # create one row, then expand to chunk size
         chunk_size = len(indexes) if indexes else len(self.positive_triples)
         device = self.positive_triples.device
@@ -449,6 +538,17 @@ class NaiveSharedNegativeSample(BatchNegativeSample):
         return negative_samples1.unsqueeze(0).expand((chunk_size, -1))
 
     def score(self, model, indexes=None) -> torch.Tensor:
+        """Calculates the scores for a given model and set of indexes.
+        Parameters:
+            - model (torch.nn.Module): The model to use for scoring.
+            - indexes (torch.Tensor): The indexes to use for scoring, if applicable.
+        Returns:
+            - scores (torch.Tensor): The scores for the given model and indexes.
+        Processing Logic:
+            - Prepares and forwards the model for scoring.
+            - Computes scores for all unique targets for the given slot.
+            - Repeats scores as needed for weighted random sampling."""
+        
         if self._implementation != "batch":
             return super().score(model, indexes)
 
@@ -486,6 +586,17 @@ class NaiveSharedNegativeSample(BatchNegativeSample):
         return scores
 
     def to(self, device) -> "NaiveSharedNegativeSample":
+        """"Moves the NaiveSharedNegativeSample model to the specified device and returns the updated model."
+        Parameters:
+            - device (torch.device): The device to move the model to.
+        Returns:
+            - NaiveSharedNegativeSample: The updated model.
+        Processing Logic:
+            - Move model to specified device.
+            - Update unique samples to specified device.
+            - Update repeat indexes to specified device.
+            - Return updated model."""
+        
         super().to(device)
         self._unique_samples = self._unique_samples.to(device)
         self._repeat_indexes = self._repeat_indexes.to(device)
@@ -504,12 +615,16 @@ class DefaultSharedNegativeSample(BatchNegativeSample):
         drop_index: torch.Tensor,
         repeat_indexes: torch.Tensor,
     ):
+        """"""
+        
         super().__init__(config, configuration_key, positive_triples, slot, num_samples)
         self._unique_samples = unique_samples
         self._drop_index = drop_index
         self._repeat_indexes = repeat_indexes
 
     def unique_samples(self, indexes=None, return_inverse=False) -> torch.Tensor:
+        """"""
+        
         if return_inverse:
             # slow but probably rarely used anyway
             return super(DefaultSharedNegativeSample, self).unique_samples(
@@ -524,6 +639,8 @@ class DefaultSharedNegativeSample(BatchNegativeSample):
         return self._unique_samples
 
     def samples(self, indexes=None) -> torch.Tensor:
+        """"""
+        
         num_samples = self.num_samples
         triples = (
             self.positive_triples
@@ -558,6 +675,8 @@ class DefaultSharedNegativeSample(BatchNegativeSample):
         return negative_samples
 
     def score(self, model, indexes=None) -> torch.Tensor:
+        """"""
+        
         if self._implementation != "batch":
             return super().score(model, indexes)
 
@@ -601,6 +720,8 @@ class DefaultSharedNegativeSample(BatchNegativeSample):
         return scores
 
     def to(self, device):
+        """"""
+        
         super().to(device)
         self._unique_samples = self._unique_samples.to(device)
         self._drop_index = self._drop_index.to(device)
@@ -610,9 +731,13 @@ class DefaultSharedNegativeSample(BatchNegativeSample):
 
 class KgeUniformSampler(KgeSampler):
     def __init__(self, config: Config, configuration_key: str, dataset: Dataset):
+        """"""
+        
         super().__init__(config, configuration_key, dataset)
 
     def _sample(self, positive_triples: torch.Tensor, slot: int, num_samples: int):
+        """"""
+        
         return torch.randint(
             self.vocabulary_size[slot], (positive_triples.size(0), num_samples)
         )
@@ -620,6 +745,8 @@ class KgeUniformSampler(KgeSampler):
     def _sample_shared(
         self, positive_triples: torch.Tensor, slot: int, num_samples: int
     ):
+        """"""
+        
         # For shared_type=naive, produces:
         # - a tensor `unique_samples` of size U holding a list of unique negative
         # samples.
