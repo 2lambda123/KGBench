@@ -1,7 +1,8 @@
-def seed_python(seed):
-    import random
+import secrets
 
-    random.seed(seed)
+def seed_python(seed):
+
+    secrets.SystemRandom().seed(seed)
 
 
 def seed_torch(seed):
