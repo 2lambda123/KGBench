@@ -29,6 +29,34 @@ class NodePieceEmbedder(KgeEmbedder):
         vocab_size: int,
         init_for_load_only=False,
     ):
+        """Function:
+        def __init__(
+            self,
+            config: Config,
+            dataset: Dataset,
+            configuration_key: str,
+            vocab_size: int,
+            init_for_load_only=False,
+        ):
+            Initializes the model with the given configuration, dataset, and vocabulary size.
+            Parameters:
+                - config (Config): The configuration object for the model.
+                - dataset (Dataset): The dataset used for training.
+                - configuration_key (str): The key used to retrieve the model's configuration.
+                - vocab_size (int): The size of the vocabulary.
+                - init_for_load_only (bool): Whether or not the model is being initialized for loading only.
+            Returns:
+                - None
+            Processing Logic:
+                - Reads the configuration.
+                - Sets the vocabulary size.
+                - Initializes the anchor embeddings.
+                - Sets the maximum sequence length.
+                - Initializes the distance embeddings.
+                - Initializes the relational context embeddings.
+                - Sets the dropout rate.
+                - Initializes the set encoder."""
+        
         super().__init__(
             config, dataset, configuration_key, init_for_load_only=init_for_load_only
         )
@@ -138,6 +166,8 @@ class NodePieceEmbedder(KgeEmbedder):
 
 
     def _normalize_embeddings(self):
+        """"""
+        
         if self.normalize_p > 0:
             with torch.no_grad():
                 self.anchor_embeddings.weight.data = torch.nn.functional.normalize(
@@ -151,6 +181,8 @@ class NodePieceEmbedder(KgeEmbedder):
                 )
 
     def prepare_job(self, job: Job, **kwargs):
+        """"""
+        
         from kgbench.job import TrainingJob
 
         super().prepare_job(job, **kwargs)
@@ -163,6 +195,8 @@ class NodePieceEmbedder(KgeEmbedder):
 
     @torch.no_grad()
     def init_pretrained(self, pretrained_embedder: KgeEmbedder) -> None:
+        """"""
+        
         (
             self_intersect_ind,
             pretrained_intersect_ind,
@@ -214,9 +248,28 @@ class NodePieceEmbedder(KgeEmbedder):
         return pooled
 
     def embed(self, indexes: Tensor) -> Tensor:
+        """"""
+        
         return self._postprocess(self.embedder(indexes.long()))
 
     def embedder(self, indexes: Tensor) -> Tensor:
+        """Embeds given indexes into anchor embeddings and adds distance and relation embeddings if applicable.
+        Parameters:
+            - indexes (Tensor): Tensor of indexes to be embedded.
+        Returns:
+            - Tensor: Embedded tensor of given indexes.
+        Processing Logic:
+            - Selects hashes and distances from self.hashes and self.distances using given indexes.
+            - Selects anchor embeddings using hashes.
+            - Adds distance embeddings to anchor embeddings if self.use_distances is True.
+            - Selects unique 1-hop relations from self.unique_1hop_relations using given indexes.
+            - Embeds relations using self.relcontext_embeddings.
+            - Concatenates anchor embeddings and relation embeddings.
+            - Pools anchor embeddings using self.pool_anchors.
+        Example:
+            embedder([1, 2, 3])
+            # Returns embedded tensor of indexes [1, 2, 3]."""
+        
         hashes, dists = self.hashes[indexes], self.distances[indexes]
 
         #anc_embs = torch.index_select(self.anchor_embeddings, dim=0, index=hashes)
@@ -242,9 +295,23 @@ class NodePieceEmbedder(KgeEmbedder):
         return anc_embs
 
     def embed_all(self) -> Tensor:
+        """"""
+        
         return self._postprocess(self._embeddings_all())
 
     def _embeddings_anchors(self) -> Tensor:
+        """Creates embeddings for anchors, distances, and relation contexts.
+        Parameters:
+            - self (object): Instance of the class.
+        Returns:
+            - Tensor: Concatenated embeddings for anchors, distances, and relation contexts.
+        Processing Logic:
+            - Concatenates anchor, distance, and relation context embeddings.
+            - Uses the token2id, max_seq_len, and nrelation attributes from the class.
+            - Uses the device specified in the config file.
+        Example:
+            embeddings = _embeddings_anchors(self)"""
+        
         return torch.cat(
             (self.anchor_embeddings(
                 torch.arange(len(self.token2id)+1, dtype=torch.long, device=self.config.get("job.device"))),
@@ -255,11 +322,23 @@ class NodePieceEmbedder(KgeEmbedder):
             ), dim = 0)
 
     def _postprocess(self, embeddings: Tensor) -> Tensor:
+        """"""
+        
         if self.dropout.p > 0:
             embeddings = self.dropout(embeddings)
         return embeddings
 
     def _embeddings_all(self) -> Tensor:
+        """This function returns the embeddings for all tokens in the vocabulary.
+        Parameters:
+            - self (object): The object containing the vocabulary and embedding information.
+        Returns:
+            - Tensor: A tensor containing the embeddings for all tokens in the vocabulary.
+        Processing Logic:
+            - Checks if the vocabulary size is less than 500,000.
+            - If so, returns the embeddings for all tokens in the vocabulary.
+            - If not, creates an empty tensor and iteratively concatenates the embeddings for each batch of tokens until all tokens have been processed."""
+        
         embed_bsz = 500_000
         if self.vocab_size < embed_bsz:
             return self.embedder(torch.arange(self.vocab_size, dtype=torch.long, device=self.config.get("job.device")))
@@ -270,9 +349,31 @@ class NodePieceEmbedder(KgeEmbedder):
             return embed
 
     def _get_regularize_weight(self) -> Tensor:
+        """This function returns the regularize weight option from the self object.
+        Parameters:
+            - self (object): The self object.
+        Returns:
+            - Tensor: The regularize weight option.
+        Processing Logic:
+            - Returns the regularize weight option.
+            - Gets the option from the self object.
+            - Uses the get_option method.
+            - Returns a Tensor object."""
+        
         return self.get_option("regularize_weight")
 
     def penalty(self, **kwargs) -> List[Tensor]:
+        """This function calculates the penalty term for a given regularizer type and weight, and returns a list of tensors.
+        Parameters:
+            - self (type): The instance of the class calling the function.
+            - **kwargs (type): Optional keyword arguments that can be passed to the function.
+        Returns:
+            - List[Tensor]: A list of tensors containing the calculated penalty term.
+        Processing Logic:
+            - Calculates the penalty term based on the regularizer type and weight.
+            - Handles both unweighted and weighted Lp regularization.
+            - Raises a ValueError if an unknown regularization type is provided."""
+        
         # TODO factor out to a utility method
         result = super().penalty(**kwargs)
         if self.regularize == "" or self.get_option("regularize_weight") == 0.0:
@@ -321,6 +422,21 @@ class NodePieceEmbedder(KgeEmbedder):
         return result
 
     def tokenize_kg(self):
+        """Tokenizes the knowledge graph into anchors, non-anchors, and vocabulary.
+        Parameters:
+            - self (type): Instance of the class.
+        Returns:
+            - anchors (type): List of anchors.
+            - non_anchors (type): List of non-anchors.
+            - vocab (type): List of vocabulary.
+        Processing Logic:
+            - Gets tokenizer and anchor strategy.
+            - Generates a filename based on dataset name, number of anchors, number of paths, and anchor strategy.
+            - Adds special tokens to the filename if sp_limit, rand_limit, tkn_mode, or partition are specified.
+            - Checks if the file exists.
+            - If the file exists, loads the anchors, non-anchors, and vocabulary from the file.
+            - If the file does not exist, raises a ValueError."""
+        
 
         self.tokenizer = self.get_option('tokenizer')
         self.anchor_strategy = self.tokenizer['anchor_strategy']
